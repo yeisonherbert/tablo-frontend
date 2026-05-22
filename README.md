@@ -197,10 +197,99 @@ docker run --rm -p 8080:80 tablo-frontend:latest
 
 ## Despliegue en AWS (Vue 3 / SPA)
 
-El proyecto compila a archivos estáticos (`dist/`). Tienes dos caminos. El
-**Opción A (S3 + CloudFront)** es el recomendado para una SPA estática.
+El proyecto compila a archivos estáticos (`dist/`). Tienes tres caminos:
 
-### Opción A — S3 + CloudFront (estático, recomendado)
+- **Opción A — S3 público (website hosting):** rápido, ideal para pruebas/demos. Solo HTTP.
+- **Opción B — S3 + CloudFront:** recomendado para producción. HTTPS + CDN + bucket privado.
+- **Opción C — Contenedor Docker:** si prefieres servir desde Nginx.
+
+### Opción A — S3 público con website hosting (rápido, para pruebas)
+
+Sirve el `dist/` directamente desde un bucket S3 público. Es el camino más
+rápido para validar el sitio en internet (⚠️ solo **HTTP**, sin HTTPS).
+
+**1. Compilar el sitio**
+
+```bash
+npm install
+npm run build      # genera la carpeta dist/
+```
+
+**2. Crear el bucket (una sola vez)**
+
+```bash
+aws s3 mb s3://tablo-frontend-prod --region us-east-1
+```
+
+**3. Hacer el bucket público (una sola vez)**
+
+```bash
+# Desactivar el bloqueo de acceso público
+aws s3api put-public-access-block \
+  --bucket tablo-frontend-prod \
+  --public-access-block-configuration \
+  "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+# Aplicar política de lectura pública (usa bucket-policy-public.json del repo)
+aws s3api put-bucket-policy \
+  --bucket tablo-frontend-prod \
+  --policy file://bucket-policy-public.json
+
+# Habilitar website hosting con fallback a index.html (SPA routing)
+aws s3 website s3://tablo-frontend-prod \
+  --index-document index.html \
+  --error-document index.html
+```
+
+> Contenido de `bucket-policy-public.json`:
+>
+> ```json
+> {
+>   "Version": "2012-10-17",
+>   "Statement": [
+>     {
+>       "Sid": "PublicReadGetObject",
+>       "Effect": "Allow",
+>       "Principal": "*",
+>       "Action": "s3:GetObject",
+>       "Resource": "arn:aws:s3:::tablo-frontend-prod/*"
+>     }
+>   ]
+> }
+> ```
+
+**4. Subir el contenido**
+
+```bash
+# Assets con hash -> cache largo
+aws s3 sync dist/ s3://tablo-frontend-prod \
+  --delete \
+  --cache-control "public, max-age=31536000, immutable" \
+  --exclude "index.html"
+
+# index.html -> sin cache (para que siempre tome la última versión)
+aws s3 cp dist/index.html s3://tablo-frontend-prod/index.html \
+  --cache-control "no-cache"
+```
+
+**5. Abrir el sitio**
+
+- App (SPA, endpoint de website): `http://tablo-frontend-prod.s3-website-us-east-1.amazonaws.com`
+- Archivo directo (HTTPS): `https://tablo-frontend-prod.s3.us-east-1.amazonaws.com/index.html`
+
+**Desplegar una actualización** (tras hacer cambios):
+
+```bash
+npm run build && \
+aws s3 sync dist/ s3://tablo-frontend-prod --delete \
+  --cache-control "public, max-age=31536000, immutable" --exclude "index.html" && \
+aws s3 cp dist/index.html s3://tablo-frontend-prod/index.html --cache-control "no-cache"
+```
+
+> Los pasos 2 y 3 son de una sola vez. Para actualizar, basta `npm run build`
+> + las dos líneas de subida (el comando de arriba ya las combina).
+
+### Opción B — S3 + CloudFront (estático, recomendado)
 
 Sirve el `dist/` desde un bucket S3 detrás de CloudFront (HTTPS + CDN global).
 
@@ -274,7 +363,7 @@ aws s3 cp dist/index.html "s3://$BUCKET/index.html" --cache-control "no-cache"
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/" "/index.html"
 ```
 
-### Opción B — Contenedor Docker en AWS (ECS Fargate / App Runner)
+### Opción C — Contenedor Docker en AWS (ECS Fargate / App Runner)
 
 Usa el `Dockerfile` (Nginx) si prefieres servir desde un contenedor.
 
