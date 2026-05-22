@@ -192,6 +192,8 @@ docker run --rm -p 8080:80 tablo-frontend:latest
 | POST   | `/projects/{id}/members`      | Añadir participante por email        |
 | POST   | `/projects/{id}/tasks`        | Crear tarea (nace en `backlog`)      |
 | PATCH  | `/tasks/{id}`                 | Actualizar `status` de la tarea      |
+| PUT    | `/tasks/{id}/details`         | Editar título y descripción          |
+| DELETE | `/tasks/{id}`                 | Eliminar la tarea                    |
 
 ---
 

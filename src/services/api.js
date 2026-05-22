@@ -42,4 +42,14 @@ export const tasksApi = {
   updateStatus(taskId, status) {
     return http.patch(`/tasks/${taskId}`, { status }).then((r) => r.data)
   },
+
+  // PUT /tasks/{id}/details -> Task con título/descripción actualizados
+  updateDetails(taskId, payload) {
+    return http.put(`/tasks/${taskId}/details`, payload).then((r) => r.data)
+  },
+
+  // DELETE /tasks/{id}
+  remove(taskId) {
+    return http.delete(`/tasks/${taskId}`).then((r) => r.data)
+  },
 }

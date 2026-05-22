@@ -101,6 +101,43 @@ export const useBoardStore = defineStore('board', () => {
     }
   }
 
+  // Localiza una tarea en sus columnas. Devuelve { list, idx } o null.
+  function findTask(taskId) {
+    for (const col of COLUMNS) {
+      const idx = lists[col.id].findIndex((t) => t.id === taskId)
+      if (idx !== -1) return { list: lists[col.id], idx }
+    }
+    return null
+  }
+
+  // PUT /tasks/{id}/details — edita título y descripción.
+  async function updateTaskDetails(taskId, { title, description }) {
+    try {
+      const updated = await tasksApi.updateDetails(taskId, { title, description })
+      const found = findTask(taskId)
+      if (found) found.list[found.idx] = { ...found.list[found.idx], ...updated }
+      return true
+    } catch (e) {
+      error.value = e.response?.data?.detail || 'No se pudo actualizar la tarea.'
+      return false
+    }
+  }
+
+  // DELETE /tasks/{id} — borrado optimista; si falla, recargamos el proyecto.
+  async function deleteTask(taskId) {
+    const found = findTask(taskId)
+    const removed = found ? found.list.splice(found.idx, 1)[0] : null
+    try {
+      await tasksApi.remove(taskId)
+      return true
+    } catch (e) {
+      error.value = e.response?.data?.detail || 'No se pudo eliminar la tarea.'
+      // Restauramos lo que quitamos para no perder la tarjeta en pantalla.
+      if (found && removed) found.list.splice(found.idx, 0, removed)
+      return false
+    }
+  }
+
   function reset() {
     projects.value = []
     currentProject.value = null
@@ -119,6 +156,8 @@ export const useBoardStore = defineStore('board', () => {
     createProject,
     createTask,
     moveTask,
+    updateTaskDetails,
+    deleteTask,
     reset,
   }
 })
